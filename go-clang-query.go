@@ -8,41 +8,39 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 )
 
-//////////////////////////////
-// Set from http://arslan.io/thread-safe-set-data-structure-in-go
+// http://arslan.io/thread-safe-set-data-structure-in-go
 
 type Set struct {
-	m map[string]bool
+	m map[Match]bool
 	sync.RWMutex
 }
 
-func New() *Set {
+func NewSet() *Set {
 	return &Set{
-		m: make(map[string]bool),
+		m: make(map[Match]bool),
 	}
 }
 
 // Add add
-func (s *Set) Add(item string) {
+func (s *Set) Add(item Match) {
 	s.Lock()
 	defer s.Unlock()
 	s.m[item] = true
 }
 
 // Remove deletes the specified item from the map
-func (s *Set) Remove(item string) {
+func (s *Set) Remove(item Match) {
 	s.Lock()
 	defer s.Unlock()
 	delete(s.m, item)
 }
 
 // Has looks for the existence of an item
-func (s *Set) Has(item string) bool {
+func (s *Set) Has(item Match) bool {
 	s.RLock()
 	defer s.RUnlock()
 	_, ok := s.m[item]
@@ -58,7 +56,7 @@ func (s *Set) Len() int {
 func (s *Set) Clear() {
 	s.Lock()
 	defer s.Unlock()
-	s.m = make(map[string]bool)
+	s.m = make(map[Match]bool)
 }
 
 // IsEmpty checks for emptiness
@@ -70,10 +68,10 @@ func (s *Set) IsEmpty() bool {
 }
 
 // Set returns a slice of all items
-func (s *Set) List() []string {
+func (s *Set) List() []Match {
 	s.RLock()
 	defer s.RUnlock()
-	list := make([]string, 0)
+	list := make([]Match, 0)
 	for item := range s.m {
 		list = append(list, item)
 	}
@@ -83,7 +81,8 @@ func (s *Set) List() []string {
 //////////////////////////////
 
 func clangQuery(source string, query string, args []string) string {
-	proc := exec.Command("clang-query", append([]string{source}, args...)...)
+	allArgs := append([]string{source}, args...)
+	proc := exec.Command("clang-query", allArgs...)
 	pin, _ := proc.StdinPipe()
 	pout, _ := proc.StdoutPipe()
 	// perr, _ := proc.StderrPipe()
@@ -104,18 +103,45 @@ func getExtraArgs(args []string) [][]string {
 	return [][]string{}
 }
 
-func parseMatches(matches string) []string {
-	var files []string
+type Match struct {
+	loc, line, annotation string
+}
+
+func makeMatch(loc, line, annotation string) Match {
+	return Match{loc: loc, line: line, annotation: annotation}
+}
+func (t Match) String() string {
+	return fmt.Sprintf("Match:\n\n%s\n%s\n%s\n", t.loc, t.line, t.annotation)
+}
+
+func ParseMatches(matches string) []Match {
+	var results []Match
 	lines := strings.Split(matches, "\n")
-	if len(lines) <= 6 {
-		return []string{}
+	if len(lines) < 6 {
+		return []Match{}
 	}
-	for _, line := range lines {
-		if strings.Contains(line, ": note: \"root\" binds here") {
-			files = append(files, strings.TrimSuffix(line, ": note: \"root\" binds here"))
+
+	startIndex := 0
+	for ; startIndex < len(lines); startIndex++ {
+		if len(lines[startIndex]) < 6 {
+			continue
+		}
+		if lines[startIndex][0:5] == "Match" {
+			break
 		}
 	}
-	return files
+
+	for i := startIndex; i < len(lines); i += 6 {
+		if i+6 >= len(lines) {
+			break
+		}
+
+		loc := lines[i+2]
+		line := lines[i+3]
+		annotation := lines[i+4]
+		results = append(results, makeMatch(loc, line, annotation))
+	}
+	return results
 }
 
 func getFlags() ([]string, []string) {
@@ -125,7 +151,7 @@ func getFlags() ([]string, []string) {
 	files := []string{}
 	clangArgs := []string{}
 	for k, v := range args {
-		if v == "--" {
+		if v == "---" {
 			files = args[:k]
 			clangArgs = args[k+1:]
 			return files, clangArgs
@@ -140,7 +166,7 @@ func main() {
 	query, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 
 	// result set
-	matches := New()
+	matches := NewSet()
 
 	// limited concurrency, http://jmoiron.net/blog/limiting-concurrency-in-go/
 	concurrency := runtime.NumCPU()
@@ -148,13 +174,10 @@ func main() {
 
 	// spawn workers
 	for _, file := range files {
-		file, _ = strconv.Unquote(file)
 		sem <- true
 		go func(this_file string) {
 			defer func() { <-sem }()
-			fmt.Println(this_file)
-			for _, match := range parseMatches(clangQuery(this_file, query, clangArgs)) {
-				// fmt.Println(match)
+			for _, match := range ParseMatches(clangQuery(this_file, query, clangArgs)) {
 				matches.Add(match)
 			}
 		}(file)

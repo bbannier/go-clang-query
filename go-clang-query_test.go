@@ -21,9 +21,12 @@ using namespace std;  // Don't do this at home, kids.
 
 `
 
-	loc := "../3rdparty/libprocess/3rdparty/protobuf-2.5.0/src/google/protobuf/stubs/common.h:1218:1: note: \"root\" binds here"
-	line := "using namespace std;  // Don't do this at home, kids."
-	annotation := "^~~~~~~~~~~~~~~~~~~"
+	info := `
+../3rdparty/libprocess/3rdparty/protobuf-2.5.0/src/google/protobuf/stubs/common.h:1218:1: note: "root" binds here
+using namespace std;  // Don't do this at home, kids.
+^~~~~~~~~~~~~~~~~~~
+
+`
 
 	result := ParseMatches(aMatch)
 
@@ -31,16 +34,33 @@ using namespace std;  // Don't do this at home, kids.
 		t.Errorf("Expected 2 result, got %d", len(result))
 	}
 
-	for _, r := range result {
-		if r.loc != loc {
-			t.Errorf("Didn't get expected result, but instead %s", r.loc)
-		}
-		if r.line != line {
-			t.Errorf("Didn't get expected result, but instead %s", r.line)
-		}
-		if r.annotation != annotation {
-			t.Errorf("Didn't get expected result, but instead %s", r.annotation)
+	for i, r := range result {
+		if r.info != info {
+			t.Errorf("Didn't get expected result for record %d, \n%s\n, but instead\n %s\n", i, info, r.info)
 		}
 	}
 
+}
+
+func TestParseMatches2(t *testing.T) {
+	aMatch := `
+Match #1:
+
+some_source_line.cpp:123:456: note: "root" binds here
+bla;
+^~~
+
+Match #2:
+
+some_source_line.cpp:123:456: note: "root" binds here
+bla;
+^~~
+
+`
+
+	result := ParseMatches(aMatch)
+
+	if len(result) != 2 {
+		t.Errorf("Expected 2 result, got %d", len(result))
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -104,14 +105,11 @@ func getExtraArgs(args []string) [][]string {
 }
 
 type Match struct {
-	loc, line, annotation string
+	info string
 }
 
-func makeMatch(loc, line, annotation string) Match {
-	return Match{loc: loc, line: line, annotation: annotation}
-}
-func (t Match) String() string {
-	return fmt.Sprintf("Match:\n\n%s\n%s\n%s\n", t.loc, t.line, t.annotation)
+func (m Match) String() string {
+	return m.info
 }
 
 func ParseMatches(matches string) []Match {
@@ -121,26 +119,26 @@ func ParseMatches(matches string) []Match {
 		return []Match{}
 	}
 
-	startIndex := 0
-	for ; startIndex < len(lines); startIndex++ {
-		if len(lines[startIndex]) < 6 {
-			continue
-		}
-		if lines[startIndex][0:5] == "Match" {
-			break
+	var match []string
+	activeMatch := false
+	for _, line := range lines {
+		if len(line) > 5 && line[0:5] == "Match" {
+			activeMatch = true
+			if len(match) != 0 { // the match on the stack is done
+				results = append(results, Match{strings.Join(match, "\n")})
+				match = []string{}
+			}
+		} else if activeMatch {
+			match = append(match, line)
 		}
 	}
-
-	for i := startIndex; i < len(lines); i += 6 {
-		if i+6 >= len(lines) {
-			break
-		}
-
-		loc := lines[i+2]
-		line := lines[i+3]
-		annotation := lines[i+4]
-		results = append(results, makeMatch(loc, line, annotation))
+	if len(match) != 0 {
+		// Store the currently processing match.
+		// The last line contains the number of matches which we do not care about.
+		results = append(results, Match{strings.Join(match[:int(math.Max(0., float64(len(match)-2)))], "\n")})
+		match = []string{}
 	}
+
 	return results
 }
 
@@ -188,7 +186,9 @@ func main() {
 	}
 
 	// print results
-	for k, _ := range matches.m {
-		fmt.Println(k)
+	for i, v := range matches.List() {
+		fmt.Printf("Match #%d:\n", i+1)
+		fmt.Println(v)
 	}
+	fmt.Printf("\n%d matches\n", matches.Len())
 }

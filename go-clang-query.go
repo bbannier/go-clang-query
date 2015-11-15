@@ -84,14 +84,21 @@ func (s *Set) List() []Match {
 func clangQuery(source string, query string, args []string) string {
 	allArgs := append([]string{source}, args...)
 	proc := exec.Command("clang-query", allArgs...)
+
 	pin, _ := proc.StdinPipe()
 	pout, _ := proc.StdoutPipe()
-	// perr, _ := proc.StderrPipe()
+	perr, _ := proc.StderrPipe()
+
 	proc.Start()
 	pin.Write([]byte(query + "\n"))
 	pin.Close()
+
 	out, _ := ioutil.ReadAll(pout)
 	proc.Wait()
+
+	err, _ := ioutil.ReadAll(perr)
+	os.Stderr.WriteString(string(err))
+
 	return string(out)
 }
 

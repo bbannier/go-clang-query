@@ -13,13 +13,13 @@ import (
 	"sync"
 )
 
-// http://arslan.io/thread-safe-set-data-structure-in-go
-
+// Set A thread-safe set data structure, http://arslan.io/thread-safe-set-data-structure-in-go
 type Set struct {
 	m map[Match]bool
 	sync.RWMutex
 }
 
+// NewSet create a new Set
 func NewSet() *Set {
 	return &Set{
 		m: make(map[Match]bool),
@@ -68,11 +68,11 @@ func (s *Set) IsEmpty() bool {
 	return false
 }
 
-// Set returns a slice of all items
+// List returns a slice of all items
 func (s *Set) List() []Match {
 	s.RLock()
 	defer s.RUnlock()
-	list := make([]Match, 0)
+	var list []Match
 	for item := range s.m {
 		list = append(list, item)
 	}
@@ -111,6 +111,7 @@ func getExtraArgs(args []string) [][]string {
 	return [][]string{}
 }
 
+// Match a clang-query match
 type Match struct {
 	info string
 }
@@ -119,6 +120,7 @@ func (m Match) String() string {
 	return m.info
 }
 
+// ParseMatches parse matches from a clang-query output stream
 func ParseMatches(matches string) []Match {
 	var results []Match
 	lines := strings.Split(matches, "\n")

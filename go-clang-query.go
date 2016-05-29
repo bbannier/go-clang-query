@@ -3,19 +3,19 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"gopkg.in/fatih/set.v0"
 	"io/ioutil"
 	"log"
 	"math"
 	"net"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 )
 
-func clangQuery(source string, query string, args []string) []Match {
+func clangQuery(source string, query string, args []string) ([]Match, error) {
 	allArgs := append([]string{source}, args...)
 	proc := exec.Command("clang-query", allArgs...)
 
@@ -30,10 +30,15 @@ func clangQuery(source string, query string, args []string) []Match {
 	out, _ := ioutil.ReadAll(pout)
 	proc.Wait()
 
-	err, _ := ioutil.ReadAll(perr)
-	os.Stderr.WriteString(string(err))
+	matches := ParseMatches(string(out))
 
-	return ParseMatches(string(out))
+	errorMessage, _ := ioutil.ReadAll(perr)
+	if string(errorMessage) != "" {
+		log.Fatal(string(errorMessage))
+		return matches, errors.New(string(errorMessage))
+	}
+
+	return matches, nil
 }
 
 func getExtraArgs(args []string) [][]string {
@@ -118,6 +123,11 @@ func getflags() flags {
 	return *flags
 }
 
+type clangError struct {
+	File  string `json:"file"`
+	Error string `json:"error"`
+}
+
 type response struct {
 	Matches []string `json:"matches"`
 }
@@ -138,8 +148,9 @@ func main() {
 
 		log.Printf("Message Received: %s\n", query)
 
-		// result set
-		matches := set.New()
+		// result sets
+		results := set.New()
+		errors := set.New()
 
 		// limited concurrency, http://jmoiron.net/blog/limiting-concurrency-in-go/
 		concurrency := runtime.NumCPU()
@@ -150,9 +161,22 @@ func main() {
 			sem <- true
 			go func(this_file string) {
 				defer func() { <-sem }()
-				for _, match := range clangQuery(this_file, query, flags.ClangArgs) {
-					matches.Add(match.String())
+
+				matches, err := clangQuery(this_file, query, flags.ClangArgs)
+
+				if err != nil {
+					log.Fatal(err)
 				}
+
+				for _, match := range matches {
+					results.Add(match.String())
+				}
+
+				if err != nil {
+					errors.Add(clangError{this_file, err.Error()})
+					log.Println(err)
+				}
+
 			}(file)
 		}
 		// join workers
@@ -164,7 +188,7 @@ func main() {
 			Matches: []string{}}
 
 		// accumulate results
-		for _, match := range set.StringSlice(matches) {
+		for _, match := range set.StringSlice(results) {
 			response.Matches = append(response.Matches, match)
 		}
 
@@ -172,7 +196,7 @@ func main() {
 
 		conn.Write([]byte(string(jsonResponse) + "\n"))
 
-		log.Printf("Found %d matches", matches.Size())
+		log.Printf("Found %d matches", results.Size())
 
 		conn.Close()
 		conn, _ = ln.Accept()

@@ -83,7 +83,7 @@ func (s *Set) List() []Match {
 
 //////////////////////////////
 
-func clangQuery(source string, query string, args []string) string {
+func clangQuery(source string, query string, args []string) []Match {
 	allArgs := append([]string{source}, args...)
 	proc := exec.Command("clang-query", allArgs...)
 
@@ -101,7 +101,7 @@ func clangQuery(source string, query string, args []string) string {
 	err, _ := ioutil.ReadAll(perr)
 	os.Stderr.WriteString(string(err))
 
-	return string(out)
+	return ParseMatches(string(out))
 }
 
 func getExtraArgs(args []string) [][]string {
@@ -218,7 +218,7 @@ func main() {
 			sem <- true
 			go func(this_file string) {
 				defer func() { <-sem }()
-				for _, match := range ParseMatches(clangQuery(this_file, query, flags.ClangArgs)) {
+				for _, match := range clangQuery(this_file, query, flags.ClangArgs) {
 					matches.Add(match)
 				}
 			}(file)

@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
@@ -151,53 +153,96 @@ func ParseMatches(matches string) []Match {
 	return results
 }
 
-func getFlags() ([]string, []string) {
-	// parse args
+type flags struct {
+	Listen    string
+	Files     []string
+	ClangArgs []string
+}
+
+func getflags() flags {
+
+	listen := flag.String("listen", ":3333", "Where to listening for queries")
+
 	flag.Parse()
+
 	args := flag.Args()
 	files := []string{}
 	clangArgs := []string{}
+
 	for k, v := range args {
 		if v == "---" {
 			files = args[:k]
 			clangArgs = args[k+1:]
-			return files, clangArgs
+			break
 		}
 		files = args
 	}
-	return files, clangArgs
+
+	flags := &flags{
+		Listen:    *listen,
+		Files:     files,
+		ClangArgs: clangArgs}
+
+	return *flags
+}
+
+type response struct {
+	Matches []string `json:"matches"`
 }
 
 func main() {
-	files, clangArgs := getFlags()
-	query, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	flags := getflags()
 
-	// result set
-	matches := NewSet()
-
-	// limited concurrency, http://jmoiron.net/blog/limiting-concurrency-in-go/
-	concurrency := runtime.NumCPU()
-	sem := make(chan bool, concurrency)
-
-	// spawn workers
-	for _, file := range files {
-		sem <- true
-		go func(this_file string) {
-			defer func() { <-sem }()
-			for _, match := range ParseMatches(clangQuery(this_file, query, clangArgs)) {
-				matches.Add(match)
-			}
-		}(file)
-	}
-	// join workers
-	for i := 0; i < cap(sem); i++ {
-		sem <- true
+	log.Println("Working on files:")
+	for _, file := range flags.Files {
+		log.Println("    " + file)
 	}
 
-	// print results
-	for i, v := range matches.List() {
-		fmt.Printf("Match #%d:\n", i+1)
-		fmt.Println(v)
+	ln, _ := net.Listen("tcp", flags.Listen)
+	conn, _ := ln.Accept()
+
+	for {
+		query, _ := bufio.NewReader(conn).ReadString('\n')
+
+		log.Printf("Message Received: %s\n", query)
+
+		// result set
+		matches := NewSet()
+
+		// limited concurrency, http://jmoiron.net/blog/limiting-concurrency-in-go/
+		concurrency := runtime.NumCPU()
+		sem := make(chan bool, concurrency)
+
+		// spawn workers
+		for _, file := range flags.Files {
+			sem <- true
+			go func(this_file string) {
+				defer func() { <-sem }()
+				for _, match := range ParseMatches(clangQuery(this_file, query, flags.ClangArgs)) {
+					matches.Add(match)
+				}
+			}(file)
+		}
+		// join workers
+		for i := 0; i < cap(sem); i++ {
+			sem <- true
+		}
+
+		response := &response{
+			Matches: []string{}}
+
+		// accumulate results
+		for _, match := range matches.List() {
+			response.Matches = append(response.Matches, match.String())
+		}
+
+		jsonResponse, _ := json.Marshal(response)
+
+		conn.Write([]byte(string(jsonResponse) + "\n"))
+
+		log.Printf("Found %d matches", matches.Len())
+
+		conn.Close()
+		conn, _ = ln.Accept()
 	}
-	fmt.Printf("\n%d matches\n", matches.Len())
 }

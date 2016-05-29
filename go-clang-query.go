@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"flag"
+	"gopkg.in/fatih/set.v0"
 	"io/ioutil"
 	"log"
 	"math"
@@ -12,76 +13,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"sync"
 )
-
-// Set A thread-safe set data structure, http://arslan.io/thread-safe-set-data-structure-in-go
-type Set struct {
-	m map[Match]bool
-	sync.RWMutex
-}
-
-// NewSet create a new Set
-func NewSet() *Set {
-	return &Set{
-		m: make(map[Match]bool),
-	}
-}
-
-// Add add
-func (s *Set) Add(item Match) {
-	s.Lock()
-	defer s.Unlock()
-	s.m[item] = true
-}
-
-// Remove deletes the specified item from the map
-func (s *Set) Remove(item Match) {
-	s.Lock()
-	defer s.Unlock()
-	delete(s.m, item)
-}
-
-// Has looks for the existence of an item
-func (s *Set) Has(item Match) bool {
-	s.RLock()
-	defer s.RUnlock()
-	_, ok := s.m[item]
-	return ok
-}
-
-// Len returns the number of items in a set.
-func (s *Set) Len() int {
-	return len(s.List())
-}
-
-// Clear removes all items from the set
-func (s *Set) Clear() {
-	s.Lock()
-	defer s.Unlock()
-	s.m = make(map[Match]bool)
-}
-
-// IsEmpty checks for emptiness
-func (s *Set) IsEmpty() bool {
-	if s.Len() == 0 {
-		return true
-	}
-	return false
-}
-
-// List returns a slice of all items
-func (s *Set) List() []Match {
-	s.RLock()
-	defer s.RUnlock()
-	var list []Match
-	for item := range s.m {
-		list = append(list, item)
-	}
-	return list
-}
-
-//////////////////////////////
 
 func clangQuery(source string, query string, args []string) []Match {
 	allArgs := append([]string{source}, args...)
@@ -207,7 +139,7 @@ func main() {
 		log.Printf("Message Received: %s\n", query)
 
 		// result set
-		matches := NewSet()
+		matches := set.New()
 
 		// limited concurrency, http://jmoiron.net/blog/limiting-concurrency-in-go/
 		concurrency := runtime.NumCPU()
@@ -219,7 +151,7 @@ func main() {
 			go func(this_file string) {
 				defer func() { <-sem }()
 				for _, match := range clangQuery(this_file, query, flags.ClangArgs) {
-					matches.Add(match)
+					matches.Add(match.String())
 				}
 			}(file)
 		}
@@ -232,15 +164,15 @@ func main() {
 			Matches: []string{}}
 
 		// accumulate results
-		for _, match := range matches.List() {
-			response.Matches = append(response.Matches, match.String())
+		for _, match := range set.StringSlice(matches) {
+			response.Matches = append(response.Matches, match)
 		}
 
 		jsonResponse, _ := json.Marshal(response)
 
 		conn.Write([]byte(string(jsonResponse) + "\n"))
 
-		log.Printf("Found %d matches", matches.Len())
+		log.Printf("Found %d matches", matches.Size())
 
 		conn.Close()
 		conn, _ = ln.Accept()

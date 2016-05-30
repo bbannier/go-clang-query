@@ -76,14 +76,14 @@ func ParseMatches(matches string) []Match {
 				results = append(results, Match{strings.Join(match, "\n")})
 				match = []string{}
 			}
-		} else if activeMatch {
+		} else if activeMatch && line != "" {
 			match = append(match, line)
 		}
 	}
 	if len(match) != 0 {
 		// Store the currently processing match.
 		// The last line contains the number of matches which we do not care about.
-		results = append(results, Match{strings.Join(match[:int(math.Max(0., float64(len(match)-2)))], "\n")})
+		results = append(results, Match{strings.Join(match[:int(math.Max(0., float64(len(match))))], "\n")})
 		match = []string{}
 	}
 

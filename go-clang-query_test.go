@@ -21,12 +21,9 @@ using namespace std;  // Don't do this at home, kids.
 
 `
 
-	info := `
-../3rdparty/libprocess/3rdparty/protobuf-2.5.0/src/google/protobuf/stubs/common.h:1218:1: note: "root" binds here
+	info := `../3rdparty/libprocess/3rdparty/protobuf-2.5.0/src/google/protobuf/stubs/common.h:1218:1: note: "root" binds here
 using namespace std;  // Don't do this at home, kids.
-^~~~~~~~~~~~~~~~~~~
-
-`
+^~~~~~~~~~~~~~~~~~~`
 
 	result := ParseMatches(aMatch)
 
@@ -36,7 +33,7 @@ using namespace std;  // Don't do this at home, kids.
 
 	for i, r := range result {
 		if r.info != info {
-			t.Errorf("Didn't get expected result for record %d, \n%s\n, but instead\n %s\n", i, info, r.info)
+			t.Errorf("Didn't get expected result for record %d,\n%s\n, but instead\n %s\n", i, info, r.info)
 		}
 	}
 

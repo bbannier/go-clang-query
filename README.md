@@ -1,7 +1,13 @@
-This tool runs clang-query in parallel over a set of files and deduplicates the
+Tis tool runs clang-query in parallel over a set of files and deduplicates the
 result set.
 
 This is implemented in Go for the lulz.
+
+Install
+-------
+
+    % glide install
+    % go build
 
 Usage
 -----

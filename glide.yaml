@@ -1,0 +1,4 @@
+package: .
+import:
+- package: gopkg.in/fatih/set.v0
+  version: v0.1.0

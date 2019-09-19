@@ -149,8 +149,8 @@ func main() {
 		log.Printf("Message Received: %s\n", query)
 
 		// result sets
-		results := set.New()
-		errors := set.New()
+		results := set.New(set.NonThreadSafe)
+		errors := set.New(set.NonThreadSafe)
 
 		// limited concurrency, http://jmoiron.net/blog/limiting-concurrency-in-go/
 		concurrency := runtime.NumCPU()

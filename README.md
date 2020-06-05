@@ -6,8 +6,7 @@ This is implemented in Go for the lulz.
 Install
 -------
 
-    % glide install
-    % go build
+    $ go install github.com/bbannier/go-clang-query
 
 Usage
 -----
@@ -17,4 +16,4 @@ Queries are read from stdin.
 
 The call syntax is
 
-    % go-clang-query <file>... [--- <clang-query options>]
+    $ go-clang-query <file>... [--- <clang-query options>]

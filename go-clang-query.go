@@ -23,12 +23,19 @@ func clangQuery(source string, query string, args []string) ([]Match, error) {
 	pout, _ := proc.StdoutPipe()
 	perr, _ := proc.StderrPipe()
 
-	proc.Start()
-	pin.Write([]byte(query + "\n"))
+	if err := proc.Start(); err != nil {
+		return nil, err
+	}
+
+	if _, err := pin.Write([]byte(query + "\n")); err != nil {
+		return nil, err
+	}
 	pin.Close()
 
 	out, _ := ioutil.ReadAll(pout)
-	proc.Wait()
+	if err := proc.Wait(); err != nil {
+		return nil, err
+	}
 
 	matches := ParseMatches(string(out))
 
@@ -39,15 +46,6 @@ func clangQuery(source string, query string, args []string) ([]Match, error) {
 	}
 
 	return matches, nil
-}
-
-func getExtraArgs(args []string) [][]string {
-	for k, v := range args {
-		if v == "--" {
-			return [][]string{args[k+1:]}
-		}
-	}
-	return [][]string{}
 }
 
 // Match a clang-query match
@@ -84,7 +82,6 @@ func ParseMatches(matches string) []Match {
 		// Store the currently processing match.
 		// The last line contains the number of matches which we do not care about.
 		results = append(results, Match{strings.Join(match[:int(math.Max(0., float64(len(match))))], "\n")})
-		match = []string{}
 	}
 
 	return results
@@ -188,13 +185,13 @@ func main() {
 			Matches: []string{}}
 
 		// accumulate results
-		for _, match := range set.StringSlice(results) {
-			response.Matches = append(response.Matches, match)
-		}
+		response.Matches = append(response.Matches, set.StringSlice(results)...)
 
 		jsonResponse, _ := json.Marshal(response)
 
-		conn.Write([]byte(string(jsonResponse) + "\n"))
+		if _, err := conn.Write([]byte(string(jsonResponse) + "\n")); err != nil {
+			panic(err)
+		}
 
 		log.Printf("Found %d matches", results.Size())
 

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"flag"
 	"gopkg.in/fatih/set.v0"
-	"io/ioutil"
+	"io"
 	"log"
 	"math"
 	"net"
@@ -30,16 +30,19 @@ func clangQuery(source string, query string, args []string) ([]Match, error) {
 	if _, err := pin.Write([]byte(query + "\n")); err != nil {
 		return nil, err
 	}
-	pin.Close()
 
-	out, _ := ioutil.ReadAll(pout)
+	if err := pin.Close(); err != nil {
+		panic(err)
+	}
+
+	out, _ := io.ReadAll(pout)
 	if err := proc.Wait(); err != nil {
 		return nil, err
 	}
 
 	matches := ParseMatches(string(out))
 
-	errorMessage, _ := ioutil.ReadAll(perr)
+	errorMessage, _ := io.ReadAll(perr)
 	if string(errorMessage) != "" {
 		log.Fatal(string(errorMessage))
 		return matches, errors.New(string(errorMessage))
@@ -195,7 +198,10 @@ func main() {
 
 		log.Printf("Found %d matches", results.Size())
 
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			panic(err)
+		}
+
 		conn, _ = ln.Accept()
 	}
 }
